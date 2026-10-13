@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>אנשי קשר</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;background:#f5f5f5;color:#111}
+  header{position:sticky;top:0;background:#1a73e8;color:#fff;padding:10px}
+  header .row{display:flex;gap:8px;margin-top:8px}
+  button{border:0;border-radius:8px;padding:10px 14px;font-size:16px;cursor:pointer}
+  button.main{background:#fff;color:#1a73e8}
+  input{flex:1;padding:10px;font-size:16px;border:0;border-radius:8px}
+  ul{list-style:none;margin:0;padding:0}
+  li{display:flex;justify-content:space-between;align-items:center;background:#fff;
+     margin:6px 8px;padding:10px 14px;border-radius:10px}
+  .name{font-weight:600}
+  .nums a{display:block;color:#1a73e8;text-decoration:none;direction:ltr;text-align:right;padding:2px 0}
+  #status{padding:12px;text-align:center;color:#555}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <button class="main" id="login">התחברות עם גוגל</button>
+    <button class="main" id="export" hidden>ייצוא הכל (VCF)</button>
+  </div>
+  <div class="row"><input id="q" placeholder="חיפוש שם או מספר" hidden></div>
+</header>
+<div id="status">לחץ על "התחברות עם גוגל"</div>
+<ul id="list"></ul>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+// === הדבק כאן את ה-Client ID שלך מ-Google Cloud ===
+const CLIENT_ID = "PASTE_YOUR_CLIENT_ID.apps.googleusercontent.com";
+
+let contacts = [];
+const $ = id => document.getElementById(id);
+
+$("login").onclick = () => {
+  if (typeof google === "undefined") {
+    $("status").textContent = "ספריית גוגל לא נטענה. פתח את הדף מכתובת ה-GitHub Pages ולא מתצוגה מקדימה.";
+    return;
+  }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: "https://www.googleapis.com/auth/contacts.readonly",
+    callback: r => r.access_token ? load(r.access_token) : $("status").textContent = "ההתחברות נכשלה"
+  });
+  client.requestAccessToken();
+};
+
+async function load(token) {
+  $("status").textContent = "טוען...";
+  contacts = [];
+  let pageToken = "";
+  try {
+    do {
+      const url = "https://people.googleapis.com/v1/people/me/connections" +
+        "?personFields=names,phoneNumbers&pageSize=1000" +
+        (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+      const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      (data.connections || []).forEach(p => {
+        const name = (p.names && p.names[0] && p.names[0].displayName) || "";
+        const phones = (p.phoneNumbers || []).map(n => n.value);
+        if (name || phones.length) contacts.push({ name, phones });
+      });
+      pageToken = data.nextPageToken || "";
+    } while (pageToken);
+  } catch (e) {
+    $("status").textContent = "שגיאה בטעינה: " + e.message;
+    return;
+  }
+  contacts.sort((a, b) => a.name.localeCompare(b.name, "he"));
+  $("status").textContent = contacts.length + " אנשי קשר";
+  $("login").hidden = true;
+  $("export").hidden = false;
+  $("q").hidden = false;
+  render();
+}
+
+function render() {
+  const q = $("q").value.trim().toLowerCase();
+  const list = $("list");
+  list.innerHTML = "";
+  contacts.filter(c => !q || c.name.toLowerCase().includes(q) ||
+      c.phones.some(p => p.replace(/\D/g, "").includes(q.replace(/\D/g, "") || "\0")))
+    .forEach(c => {
+      const li = document.createElement("li");
+      const n = document.createElement("div");
+      n.className = "name";
+      n.textContent = c.name || "(ללא שם)";
+      const nums = document.createElement("div");
+      nums.className = "nums";
+      c.phones.forEach(p => {
+        const a = document.createElement("a");
+        a.href = "tel:" + p.replace(/[^\d+]/g, "");
+        a.textContent = p;
+        nums.appendChild(a);
+      });
+      li.append(n, nums);
+      list.appendChild(li);
+    });
+}
+$("q").oninput = render;
+
+$("export").onclick = () => {
+  const esc = s => s.replace(/[\\;,]/g, m => "\\" + m).replace(/\n/g, "\\n");
+  const vcf = contacts.map(c =>
+    "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:" + esc(c.name || c.phones[0] || "") +
+    "\r\nN:" + esc(c.name) + ";;;;\r\n" +
+    c.phones.map(p => "TEL;TYPE=CELL:" + p + "\r\n").join("") +
+    "END:VCARD\r\n").join("");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([vcf], { type: "text/vcard;charset=utf-8" }));
+  a.download = "contacts.vcf";
+  a.click();
+};
+</script>
+</body>
+</html>
