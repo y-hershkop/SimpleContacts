@@ -24,6 +24,7 @@
   <div class="row">
     <button class="main" id="login">התחברות עם גוגל</button>
     <button class="main" id="export" hidden>ייצוא הכל (VCF)</button>
+    <button class="main" id="setid">Client ID</button>
   </div>
   <div class="row"><input id="q" placeholder="חיפוש שם או מספר" hidden></div>
 </header>
@@ -32,13 +33,24 @@
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
-// === הדבק כאן את ה-Client ID שלך מ-Google Cloud ===
-const CLIENT_ID = "PASTE_YOUR_CLIENT_ID.apps.googleusercontent.com";
+let CLIENT_ID = "";
+try { CLIENT_ID = localStorage.getItem("cid") || ""; } catch (e) {}
 
 let contacts = [];
 const $ = id => document.getElementById(id);
 
+function askId() {
+  const v = prompt("1021780351864-9gectb3bj3fmescjqddha54kph4s4tmj.apps.googleusercontent.com", CLIENT_ID);
+  if (v) {
+    CLIENT_ID = v.trim().replace(/["'\s]/g, "");
+    try { localStorage.setItem("cid", CLIENT_ID); } catch (e) {}
+  }
+}
+$("setid").onclick = askId;
+
 $("login").onclick = () => {
+  if (!CLIENT_ID) askId();
+  if (!CLIENT_ID) return;
   if (typeof google === "undefined") {
     $("status").textContent = "ספריית גוגל לא נטענה. פתח את הדף מכתובת ה-GitHub Pages ולא מתצוגה מקדימה.";
     return;
